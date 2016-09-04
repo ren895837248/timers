@@ -31,7 +31,6 @@ public class RelaseHangTaskTimer extends BaseTimer {
 
 	}
 	
-	
 	public static void main(String[] args) {
 		try {
 			new RelaseHangTaskTimer().start(args);
@@ -41,10 +40,5 @@ public class RelaseHangTaskTimer extends BaseTimer {
 		}
 	}
 	
-	class  AA extends Thread{
-		 @Override
-		    public void run() {
-		    }
-	}
 
 }

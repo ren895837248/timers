@@ -145,10 +145,11 @@ public class RelaseHangTaskThread extends BaseThread {
 				}
 			} else {
 				StringBuffer sql = new StringBuffer(
-						"\nselect tas.to_nbr ,tas.spec_serv_id,tas.to_staff_id,tas.sharding_id,tas.ext_wo_nbr from task_order tas,so,so_book sb \n");
+						"\nselect tas.to_nbr ,tas.spec_serv_id,tas.to_staff_id,tas.sharding_id,tas.ext_wo_nbr from task_order tas,so_book sb \n");
 
-				sql.append("where tas.EXT_WO_NBR = so.EXT_SO_NBR \n");
-				sql.append("and so.SO_NBR = sb.SO_NBR \n");
+				sql.append("where tas.EXT_WO_NBR = sb.EXT_SO_NBR \n");
+				//sql.append("and so.SO_NBR = sb.SO_NBR \n");
+				sql.append("and sb.STS = 'A' \n");
 				sql.append("and sb.BOOK_TIME<DATE_ADD(SYSDATE(),INTERVAL 1 HOUR) \n");
 				sql.append("and tas.RUN_STS='H' \n");
 				
@@ -157,7 +158,7 @@ public class RelaseHangTaskThread extends BaseThread {
 				sql.append("ORDER BY tas.EXT_WO_NBR \n");
 				sql.append("LIMIT ?");
 
-
+				
 				// 为了便于事务控制每个线程得到自己的数据库连接
 				conn = ConnectionFactory.createConnection();
 				log.info("[thread " + this.threadIndex + "] connect db success");
@@ -280,22 +281,31 @@ public class RelaseHangTaskThread extends BaseThread {
 					runSts = "D";
 				}
 
+				log.info("[thread " + this.threadIndex + "] 处理 task_order "
+						+ toNbr + "判断任务单原runsts："+runSts);
 				/**
 				 * 先更新mysql，再更新solr
 				 */
+				
 				StringBuffer sql = new StringBuffer();
-				sql.append("update task_order set run_sts =? where to_nbr= ? and sharding_id=?");
+				sql.append("\nupdate task_order set \nrun_sts =? ,\nrun_sts_date = SYSDATE() \nwhere \nto_nbr= ? \nand sharding_id=?");
 				conn = ConnectionFactory.createConnection();
+				log.info("[thread " + this.threadIndex + "] 处理 task_order "
+						+ toNbr + "更新run_sts状态，执行sql：["+sql.toString()+"]");
+				conn.setAutoCommit(false);
 				ps = conn.prepareStatement(sql.toString());
 				ps.setString(1, runSts);
 				ps.setString(2, toNbr);
 				ps.setString(3, shardingId);
 				ps.executeUpdate();
-
+				log.info("[thread " + this.threadIndex + "] 处理 task_order "
+						+ toNbr + "更新run_sts状态成功");
 				/**
 				 * 分为扫solr和扫mysql
 				 */
 				// 扫solr
+				log.info("[thread " + this.threadIndex + "] 处理 task_order "
+						+ toNbr + "开始执行更新solr操作..");
 				if ("solr".equals(this.baseTimer.scanType)) {
 					// 扫solr
 					vo.put("RUN_STS", runSts);
@@ -351,8 +361,19 @@ public class RelaseHangTaskThread extends BaseThread {
 						}
 					}
 				}
+				log.info("[thread " + this.threadIndex + "] 处理 task_order "
+						+ toNbr + "执行更新solr操作成功");
+				conn.commit();
 
 			} catch (Exception e) {
+				
+				try {
+					log.info("[thread " + this.threadIndex + "] 处理 task_order "
+							+ toNbr + "发生异常，回滚数据库操作..");
+					conn.rollback();
+				} catch (SQLException e1) {
+					e1.printStackTrace();
+				}
 				e.printStackTrace();
 			} finally {
 				if (client != null) {
