@@ -46,6 +46,11 @@ public abstract class BaseTimer implements IBaseDBCommand {
 	private String timerName;
 	
 	private DataSource inasDs = null;
+	private DataSource iomDs = null;
+
+	public DataSource getIomDs() {
+		return iomDs;
+	}
 
 	// 进程编码，由启动参数确定
 	public String timerProcessCode;
@@ -120,6 +125,14 @@ public abstract class BaseTimer implements IBaseDBCommand {
 	private String solrType = null;
 	private String zkHost = null;
 	private String solrUrl = null;
+	
+	private String iomJdbcDriver = null;
+
+	private String iomJdbcUrl = null;
+
+	private String iomDbUserName = null;
+
+	private String iomDbPassword = null;
 
 	// 线程刷新类型
 	//private String refreshThreadMode = SPSConfig.REFRESH_THREAD_MODE_DB;// 默认是DB
@@ -188,6 +201,8 @@ public abstract class BaseTimer implements IBaseDBCommand {
  
 	
 	public String scanType;
+	
+	public int preTimeLimit;
 
 	/**
 	 * 初始化Timer配置信息
@@ -217,7 +232,14 @@ public abstract class BaseTimer implements IBaseDBCommand {
 		// 读取配置：DB_PASSWORD
 		dbPassword = SPSConfig.getInstance().getProp(SPSConfig.DB_PASSWORD)
 				.trim();
-
+		if("RelaseHangTaskTimer".equals(timerName) ){
+			iomJdbcDriver = SPSConfig.getInstance().getProp("IOM_DB_DRIVER").trim();
+			iomJdbcUrl = SPSConfig.getInstance().getProp("IOM_DB_URL").trim();
+			iomDbUserName = SPSConfig.getInstance().getProp("IOM_DB_USER").trim();
+			iomDbPassword = SPSConfig.getInstance().getProp("IOM_DB_PASSWORD").trim();
+		}
+		
+		
 		// 读取配置：ConnectionType
 		connType = SPSConfig.getInstance().getProp(
 				timerName + SPSConfig.CONNECTION_TYPE).trim();
@@ -518,6 +540,9 @@ public abstract class BaseTimer implements IBaseDBCommand {
 		if("BillDataBringTimer".equals(timerName) || "BillDataTakeTimer".equals(timerName)|| "BillDataTakeBJTimer".equals(timerName)){
 			this.initINASDataSource();
 		}
+		if("RelaseHangTaskTimer".equals(timerName)){
+			this.initIOMDataSource();
+		}
 	}
 	
 	/**
@@ -555,6 +580,44 @@ public abstract class BaseTimer implements IBaseDBCommand {
 		log.info("初始化INAS 数据源 End ...");
 		
 	}
+	
+	
+	/**
+	 * 初始化INAS数据源
+	 * @throws SysException
+	 */
+	public void initIOMDataSource() throws SysException{
+		
+		log.info("初始化IOM 数据源 Begin ...");
+		
+		BasicDataSource iomBasicDataSource = new BasicDataSource();
+		iomBasicDataSource.setDriverClassName(this.iomJdbcDriver);
+		iomBasicDataSource.setUsername(this.iomDbUserName);
+		iomBasicDataSource.setPassword(SPSEncrypt.JieM(this.iomDbPassword));
+		iomBasicDataSource.setUrl(this.iomJdbcUrl);
+		iomBasicDataSource.setMaxActive(this.getMaxActive());
+		iomBasicDataSource.setMaxIdle(this.getMaxIdle());
+		iomBasicDataSource.setMaxWait(this.getMaxWait());
+		
+		iomDs = iomBasicDataSource;
+		
+		if (null == iomDs) {
+			throw new SysException("1001","系统获取IOM连接的数据源失败！",new Exception());
+		}
+		try {
+			Connection conn = iomDs.getConnection();
+			log.debug("iom connection "+conn);
+			if (conn != null) {
+				conn.close();
+			}
+		} catch (SQLException e) {
+			throw new SysException("1001","创建iom连接失败！",e);
+		}
+		
+		log.info("初始化IOM 数据源 End ...");
+		
+	}
+	
 
 	/**
 	 * 初始化EJB上下文,抽象方法由子类来实现

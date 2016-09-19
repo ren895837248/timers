@@ -253,7 +253,7 @@ public class DeviceStroageSyncThread extends BaseThread {
 				String sn = "";
 				String devSts = "";
 				updateDevice(conn);
-				
+				updateDeviceReclaim(conn );
 			} catch (Exception e) {
 				e.printStackTrace();
 			} finally {
@@ -279,9 +279,10 @@ public class DeviceStroageSyncThread extends BaseThread {
 	
 	private int updateDevice(Connection conn){
 		int returnInt = 0;
-		log.info("[thread " + this.threadIndex + "] ,sn/mac:["+sn+"]  不存在设备记录，直接将记录插入...");
+		log.info("[thread " + this.threadIndex + "] ,sn/mac:["+sn+"]  更新TERMINAL_DEVICE设备状态为回收...");
 		StringBuffer updateSql = new StringBuffer("update into TERMINAL_DEVICE set");
-		
+		updateSql.append(" DEV_STS ='60' ");
+		updateSql.append(" , RESTORAGE_DATE = sysdate() ");
 		updateSql.append(" WHERE 1=1 ");
 		updateSql.append(" AND SN = ?");
 		PreparedStatement ps =null;
@@ -301,6 +302,32 @@ public class DeviceStroageSyncThread extends BaseThread {
 		return 0;
 	}
 	
+	private int updateDeviceReclaim(Connection conn){
+		int returnInt = 0;
+		log.info("[thread " + this.threadIndex + "] ,sn/mac:["+sn+"]  状态为21/重用,更新device_reclaim...");
+		StringBuffer updateSql = new StringBuffer("update into device_reclaim set");
+		updateSql.append(" RECLAIM_STS ='60' ");
+		updateSql.append(" , STS_DATE = sysdate() ");
+		updateSql.append(" WHERE 1=1 ");
+		updateSql.append(" AND SN = ?");
+		updateSql.append(" AND sharding_id = ?");
+		PreparedStatement ps =null;
+		try {
+			ps = conn.prepareStatement(updateSql.toString());
+			ps.setString(2, sn);
+			ps.setString(2, shardingId);
+			
+			returnInt = ps.executeUpdate();
+			log.info("[thread " + this.threadIndex + "] ,sn/mac:["+sn+"]不存在设备记录，插入成功...");
+		} catch (Exception e) {
+			e.printStackTrace();
+		}finally{
+			if(ps!=null){
+				JdbcUtil.close(ps);
+			}
+		}
+		return 0;
+	}
 	
 	
 	

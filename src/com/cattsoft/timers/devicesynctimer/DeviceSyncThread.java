@@ -134,15 +134,17 @@ public class DeviceSyncThread extends BaseThread {
 				}
 				
 				while(StringUtils.isNotBlank(line = br.readLine())){
-					if(count == 0){
+					/*if(count == 0){
 						System.out.println(line);
-					}
+					}*/
+					/**
+					 * 每次只从文件里头读取限定的条数，防止内存溢出。
+					 */
 					if(count%baseTimer.getMaxCountPerCycle() == 0 &&count!=0){//每次读取baseTimer.getMaxCountPerCycle()条记录
-						System.out.println(line);
+						//System.out.println(line);
 						count = 0;
 						break;
 					}
-					System.out.println(count);
 					String[] devicesInfo = line.split(",");
 					String sn = devicesInfo[0];
 					String model = devicesInfo[1];
@@ -173,7 +175,7 @@ public class DeviceSyncThread extends BaseThread {
 								+ "初始化LinkedList");
 						baseTimer.bizDataList[nodNumInt] = new LinkedList();
 					}
-					skipBytes += (line.length()+2);//会多出\n\r
+					skipBytes += (line.length()+2);//每行会有\n\r
 
 					if (baseTimer.containInLastRecord(nodNumInt,sn)) {
 						log.debug("[thread " + this.threadIndex
@@ -361,6 +363,7 @@ public class DeviceSyncThread extends BaseThread {
 		
 		updateSql.append(" WHERE 1=1 ");
 		updateSql.append(" AND SN = ?");
+		updateSql.append(" AND sharding_id = ?");
 		PreparedStatement ps =null;
 		try {
 			ps = conn.prepareStatement(updateSql.toString());
@@ -378,6 +381,33 @@ public class DeviceSyncThread extends BaseThread {
 		return 0;
 	}
 	
+	private int updateDeviceReclaim(Connection conn){
+		int returnInt = 0;
+		log.info("[thread " + this.threadIndex + "] ,sn/mac:["+sn+"]  状态为21/重用,更新device_reclaim...");
+		StringBuffer updateSql = new StringBuffer("update into device_reclaim set");
+		updateSql.append(" RECLAIM_STS = ? ");
+		updateSql.append(" WHERE 1=1 ");
+		updateSql.append(" AND SN = ?");
+		updateSql.append(" AND sharding_id = ?");
+		PreparedStatement ps =null;
+		try {
+			ps = conn.prepareStatement(updateSql.toString());
+			ps.setString(1,"21");
+			ps.setString(2, sn);
+			
+			returnInt = ps.executeUpdate();
+			log.info("[thread " + this.threadIndex + "] ,sn/mac:["+sn+"]不存在设备记录，插入成功...");
+		} catch (Exception e) {
+			e.printStackTrace();
+		}finally{
+			if(ps!=null){
+				JdbcUtil.close(ps);
+			}
+		}
+		
+		
+		return 0;
+	}
 	
 	
 	

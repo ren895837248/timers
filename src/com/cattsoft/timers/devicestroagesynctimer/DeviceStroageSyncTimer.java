@@ -31,7 +31,7 @@ public class DeviceStroageSyncTimer extends BaseTimer {
 	
 	public static void main(String[] args) {
 		try {
-			new DeviceSyncTimer().start(args);
+			new DeviceStroageSyncTimer().start(args);
 		} catch (Exception e) {
 			log.error("SoParseTimer 线程启动时出现错误，请检查启动脚本或程序！！！");
 			e.printStackTrace();

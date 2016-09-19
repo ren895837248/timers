@@ -1,7 +1,7 @@
 package com.cattsoft.timers;
 
 import java.io.BufferedReader;
-import java.io.FileNotFoundException;
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -51,7 +51,13 @@ public class TTTF {
 	}
 	
 	public static void main(String[] args) throws JSchException, SftpException, IOException {
-		TTTF s = new TTTF();
-		s.start();
+		
+		File f = new File("C:\\Users\\yangshan\\Desktop\\lib");
+		File[] files = f.listFiles();
+		StringBuffer s = new StringBuffer();
+		for(File ff:files){
+			s.append(" ").append(ff.getName());
+		}
+		System.out.println(s.toString());
 	}
 }

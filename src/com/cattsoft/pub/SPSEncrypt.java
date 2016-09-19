@@ -9,21 +9,21 @@ import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 
 public class SPSEncrypt {
-  private static String Algorithm = "DES"; //¶¨Òå ¼ÓÃÜËã·¨,¿ÉÓÃ DES,DESede,Blowfish
+  private static String Algorithm = "DES"; //ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ã·¨,ï¿½ï¿½ï¿½ï¿½ DES,DESede,Blowfish
   private static String mykey = "EF6167D986E3B529";
 
   static {
     Security.addProvider(new com.sun.crypto.provider.SunJCE());
   }
 
-  //Éú³ÉÃÜÔ¿, ×¢Òâ´Ë²½ÖèÊ±¼ä±È½Ï³¤
+  //ï¿½ï¿½ï¿½ï¿½ï¿½Ô¿, ×¢ï¿½ï¿½Ë²ï¿½ï¿½ï¿½Ê±ï¿½ï¿½È½Ï³ï¿½
   public static byte[] getKey() throws Exception {
     KeyGenerator keygen = KeyGenerator.getInstance(Algorithm);
     SecretKey deskey = keygen.generateKey();
     return deskey.getEncoded();
   }
 
-  //¼ÓÃÜ
+  //ï¿½ï¿½ï¿½ï¿½
   public static byte[] encode(byte[] input, byte[] key) throws Exception {
     SecretKey deskey = new javax.crypto.spec.SecretKeySpec(key, Algorithm);
     Cipher c1 = Cipher.getInstance(Algorithm);
@@ -32,7 +32,7 @@ public class SPSEncrypt {
     return cipherByte;
   }
 
-  //½âÃÜ
+  //ï¿½ï¿½ï¿½ï¿½
   public static byte[] decode(byte[] input, byte[] key) throws Exception {
     SecretKey deskey = new javax.crypto.spec.SecretKeySpec(key, Algorithm);
     Cipher c1 = Cipher.getInstance(Algorithm);
@@ -41,7 +41,7 @@ public class SPSEncrypt {
     return clearByte;
   }
 
-  //×Ö½ÚÂë×ª»»³É16½øÖÆ×Ö·û´®
+  //ï¿½Ö½ï¿½ï¿½ï¿½×ªï¿½ï¿½ï¿½ï¿½16ï¿½ï¿½ï¿½ï¿½ï¿½Ö·ï¿½
   public static String byte2hex(byte bytes[]) {
     StringBuffer retString = new StringBuffer();
     for(int i = 0; i < bytes.length; ++i) {
@@ -50,7 +50,7 @@ public class SPSEncrypt {
     return retString.toString();
   }
 
-  //½«16½øÖÆ×Ö·û´®×ª»»³É×Ö½ÚÂë
+  //ï¿½ï¿½16ï¿½ï¿½ï¿½ï¿½ï¿½Ö·ï¿½×ªï¿½ï¿½ï¿½ï¿½ï¿½Ö½ï¿½ï¿½ï¿½
   public static byte[] hex2byte(String hex) {
     byte[] bts = new byte[hex.length() / 2];
     for(int i = 0; i < bts.length; i++) {
@@ -79,10 +79,9 @@ public class SPSEncrypt {
     String input = null;
 
     try {
-      System.out.println("-= ·þÎñ¿ªÍ¨ÃÜÂë¼ÓÃÜ/½âÃÜ³ÌÐò =- ");
+      System.out.println("-= ï¿½ï¿½ï¿½ï¿½Í¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½/ï¿½ï¿½ï¿½Ü³ï¿½ï¿½ï¿½ =- ");
       BufferedReader br = new BufferedReader(new InputStreamReader(System.in), 1);
       while(action.equals("")) {
-        System.out.print("ÇëÑ¡Ôñ£º[0]¼ÓÃÜ [1]½âÃÜ£º");
         input = br.readLine();
         if(input.trim().equals("0")) {
           action = "0";
@@ -93,10 +92,10 @@ public class SPSEncrypt {
       }
 
       if(action.equals("0")) {
-        System.out.print("ÇëÑ¡ÔñÊäÈëÒª¼ÓÃÜµÄÃÜÂë£º");
+        System.out.print("ï¿½ï¿½Ñ¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Òªï¿½ï¿½ï¿½Üµï¿½ï¿½ï¿½ï¿½ë£º");
       }
       else {
-        System.out.print("ÇëÑ¡ÔñÊäÈë¼ÓÃÜºóµÄÃÜÂë£º");
+        System.out.print("ï¿½ï¿½Ñ¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Üºï¿½ï¿½ï¿½ï¿½ï¿½ë£º");
       }
 
       input = br.readLine();
@@ -105,11 +104,11 @@ public class SPSEncrypt {
       byte[] key = hex2byte(mykey);
       if(action.equals("0")) {
         byte[] afterEncode = encode(password.getBytes(), key);
-        System.out.println("¼ÓÃÜºóµÄ×Ö·û´®Îª£º" + byte2hex(afterEncode));
+        System.out.println("xxx" + byte2hex(afterEncode));
       }
       else {
         byte[] afterDecode = decode(hex2byte(password.toUpperCase()), key);
-        System.out.println("½âÃÜºóµÄÃÜÂëÎª£º" + new String(afterDecode));
+        System.out.println("xxx" + new String(afterDecode));
       }
     }
     catch(Exception e) {

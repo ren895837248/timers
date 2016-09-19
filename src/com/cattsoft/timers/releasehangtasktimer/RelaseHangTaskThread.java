@@ -2,6 +2,7 @@ package com.cattsoft.timers.releasehangtasktimer;
 
 import java.io.IOException;
 import java.rmi.RemoteException;
+import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -11,9 +12,11 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Map;
+import java.util.UUID;
 import java.util.Map.Entry;
 import java.util.Set;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.log4j.Logger;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
@@ -88,7 +91,7 @@ public class RelaseHangTaskThread extends BaseThread {
 				try {
 					if ("solr".equals(solrType)) {
 						client = new HttpSolrClient(this.baseTimer.getSolrUrl()
-								+ "TO");
+								+ "to");
 						response = client.query(solrQuery, METHOD.POST);
 					} else {
 						cloudSolrServer = new CloudSolrClient(
@@ -145,12 +148,12 @@ public class RelaseHangTaskThread extends BaseThread {
 				}
 			} else {
 				StringBuffer sql = new StringBuffer(
-						"\nselect tas.to_nbr ,tas.spec_serv_id,tas.to_staff_id,tas.sharding_id,tas.ext_wo_nbr from task_order tas,so_book sb \n");
+						"\nselect tas.area_id,tas.to_nbr,tas.wo_nbr ,tas.spec_serv_id,tas.to_staff_id,tas.sharding_id,tas.ext_wo_nbr from task_order tas,so_book sb \n");
 
 				sql.append("where tas.EXT_WO_NBR = sb.EXT_SO_NBR \n");
 				//sql.append("and so.SO_NBR = sb.SO_NBR \n");
 				sql.append("and sb.STS = 'A' \n");
-				sql.append("and sb.BOOK_TIME<DATE_ADD(SYSDATE(),INTERVAL 1 HOUR) \n");
+				sql.append("and sb.BOOK_TIME<DATE_ADD(SYSDATE(),INTERVAL ? MINUTE) \n");
 				sql.append("and tas.RUN_STS='H' \n");
 				
 						sql.append("and tas.EXT_WO_NBR>? \n");
@@ -163,9 +166,10 @@ public class RelaseHangTaskThread extends BaseThread {
 				conn = ConnectionFactory.createConnection();
 				log.info("[thread " + this.threadIndex + "] connect db success");
 				ps = conn.prepareStatement(sql.toString());
-				ps.setString(1, baseTimer.THE_LAST_MAX_ID + "");
-				ps.setString(2, baseTimer.localNetIds);
-				ps.setInt(3, baseTimer.getMaxCountPerCycle());
+				ps.setInt(1,baseTimer.preTimeLimit);
+				ps.setString(2, baseTimer.THE_LAST_MAX_ID + "");
+				ps.setString(3, baseTimer.localNetIds);
+				ps.setInt(4, baseTimer.getMaxCountPerCycle());
 				log.debug("sql:["+sql.toString()+"]");
 				rs = ps.executeQuery();
 
@@ -176,6 +180,8 @@ public class RelaseHangTaskThread extends BaseThread {
 					vo.setToStaffId(rs.getString("to_staff_id"));
 					vo.setShardingId(rs.getString("sharding_id"));
 					vo.setExtWoNbr(rs.getString("ext_wo_nbr"));
+					vo.setWoNbr(rs.getString("wo_nbr"));
+					vo.setAreaId(rs.getString("area_id"));
 					// 取摸然后入集合
 					modNum = (Long.parseLong(vo.getExtWoNbr()))
 							% (baseTimer.threadNumber);
@@ -245,7 +251,8 @@ public class RelaseHangTaskThread extends BaseThread {
 			String specServId = null;
 			String toStaffId = null;
 			String shardingId = null;
-
+			String woNbr = null;
+			String areaId = null;
 			// 扫solr
 			if ("solr".equals(this.baseTimer.scanType)) {
 				vo = (SolrDocument) threadList.getFirst();
@@ -254,6 +261,8 @@ public class RelaseHangTaskThread extends BaseThread {
 				specServId = (String) vo.get("SPEC_SERV_ID");
 				toStaffId = (String) vo.get("TO_STAFF_ID");
 				shardingId = (String) vo.get("SHARDING_ID");
+				woNbr = (String) vo.get("WO_NBR");
+				areaId = (String)vo.get("AREA_ID");
 			} else {
 				taskOrder = (TaskOrderMVO) threadList.getFirst();
 				toNbr = taskOrder.getToNbr();
@@ -261,13 +270,24 @@ public class RelaseHangTaskThread extends BaseThread {
 				specServId = taskOrder.getSpecServId();
 				toStaffId = taskOrder.getToStaffId();
 				shardingId = taskOrder.getShardingId();
+				woNbr = taskOrder.getWoNbr();
+				areaId = taskOrder.getAreaId();
 			}
 
+			if(StringUtils.isNotBlank(woNbr)){
+				woNbr = woNbr.split(",")[0];
+			}
+			
 			baseTimer.addCurRecord(threadIndex, toNbr);
 			log.info("[thread " + this.threadIndex + "] 开始处理 task_order "
 					+ toNbr + ", co_nbr=" + extWoNbr + "记录！");
 			Connection conn = null;
 			PreparedStatement ps = null;
+			ResultSet rs = null;
+			
+			Connection iomConn = null;
+			CallableStatement iomProc = null;
+			
 			HttpSolrClient client = null;
 			CloudSolrClient cloudSolrServer = null;
 			try {
@@ -300,6 +320,22 @@ public class RelaseHangTaskThread extends BaseThread {
 				ps.executeUpdate();
 				log.info("[thread " + this.threadIndex + "] 处理 task_order "
 						+ toNbr + "更新run_sts状态成功");
+				
+				sql = new StringBuffer();
+				sql.append("\n select ext_wo_nbr from wo \nwhere wo.wo_nbr = ? \nand sharding_id=?");
+				log.info("[thread " + this.threadIndex + "] 处理 task_order "
+						+ toNbr + "查询iom工单号，执行sql：["+sql.toString()+"]");
+				conn.setAutoCommit(false);
+				ps = conn.prepareStatement(sql.toString());
+				ps.setString(1, woNbr);
+				ps.setString(2, shardingId);
+				rs = ps.executeQuery();
+				while(rs.next()){
+					woNbr = rs.getString("ext_wo_nbr");
+				}
+				log.info("[thread " + this.threadIndex + "] 处理 task_order "
+						+ toNbr + "查询iom工单号,查询出工单号为：["+woNbr+"]");
+				
 				/**
 				 * 分为扫solr和扫mysql
 				 */
@@ -311,7 +347,7 @@ public class RelaseHangTaskThread extends BaseThread {
 					vo.put("RUN_STS", runSts);
 					if ("solr".equals(solrType)) {
 						client = new HttpSolrClient(this.baseTimer.getSolrUrl()
-								+ "TO");
+								+ "to");
 						client.add(this.buildSolrInputDoc(vo));
 						client.commit();
 					} else {
@@ -326,13 +362,19 @@ public class RelaseHangTaskThread extends BaseThread {
 					}
 				} else {
 					SolrQuery query = new SolrQuery();
-					query.setQuery("TO_NBR:" + toNbr);
+					String solrQuery = "TO_NBR:"+toNbr;
+					query.setQuery(solrQuery);
+					log.info("[thread " + this.threadIndex + "] 处理 task_order ,更新solr，查询相关记录："+solrQuery);
 					QueryResponse response = null;
+					log.info("[thread " + this.threadIndex + "] 处理 task_order ,更新solr，判断solr连接模式："+solrType);
 					if ("solr".equals(solrType)) {
+						log.info("[thread " + this.threadIndex + "] 处理 task_order ,更新solr，建立solr连接："+this.baseTimer.getSolrUrl()+ "to");
 						client = new HttpSolrClient(this.baseTimer.getSolrUrl()
-								+ "TO");
+								+ "to");
+						log.info("[thread " + this.threadIndex + "] 处理 task_order ,更新solr，执行查询");
 						response = client.query(query);
 						SolrDocumentList list = response.getResults();
+						log.info("[thread " + this.threadIndex + "] 处理 task_order ,更新solr，查询结果返回记录数：["+list.size()+"]");
 						if (list != null && list.size() > 0) {
 							SolrDocument solrDocument = list.get(0);
 							solrDocument.removeFields("_version_");
@@ -351,21 +393,75 @@ public class RelaseHangTaskThread extends BaseThread {
 
 						response = cloudSolrServer.query(query);
 						SolrDocumentList list = response.getResults();
+						log.info("[thread " + this.threadIndex + "] 处理 task_order ,更新solr，查询结果返回记录数：["+list.size()+"]");
 						if (list != null && list.size() > 0) {
 							SolrDocument solrDocument = list.get(0);
 							solrDocument.removeFields("_version_");
 							solrDocument.setField("RUN_STS", runSts);
+							log.info("[thread " + this.threadIndex + "] 处理 task_order ,更新solr，将该条记录RUN_STS==>"+runSts);
 							cloudSolrServer.add(this
 									.buildSolrInputDoc(solrDocument));
 							cloudSolrServer.commit();
+							log.info("[thread " + this.threadIndex + "] 处理 task_order ,更新solr完成，提交确认");
 						}
 					}
 				}
 				log.info("[thread " + this.threadIndex + "] 处理 task_order "
 						+ toNbr + "执行更新solr操作成功");
+				
+				log.info("[thread " + this.threadIndex + "] 处理 task_order ，解挂成功，记录tohandle");
+				
+				
+				sql = new StringBuffer();
+				sql.append("INSERT INTO to_handle (`TO_HANDLE_ID`, `AREA_ID`, `TO_NBR`, `HANDLE_TYPE_ID`, `HANDLE_DATE`, `STAFF_ID`,  `SHARDING_ID`, `ARCHIVE_BASE_DATE`, `REMARKS`)"); 
+				sql.append(" VALUES (?, ?, ?, '100010', SYSDATE(), ?, ?, SYSDATE(), '任务单解挂成功');");
+				log.info("插入to_handle,sql:"+sql.toString());
+				ps = conn.prepareStatement(sql.toString());
+				ps.setString(1, UUID.randomUUID().toString().replaceAll("-",""));
+				ps.setString(2, areaId);
+				ps.setString(3, toNbr);
+				ps.setString(4, toStaffId);
+				ps.setString(5, shardingId);
+				ps.executeUpdate();
+				log.info("[thread " + this.threadIndex + "] 处理 task_order ，解挂成功，记录tohandle成功..");
+				
 				conn.commit();
-
+				
+				/**
+				 * 解挂成功，通过调用短信接口，通知供单人。
+				 */
+				if("P".equals(runSts)){
+					log.info("[thread " + this.threadIndex + "] 处理 task_order "
+							+ toNbr + "解挂成功，解挂之后调用iom接口，发送短信。");
+					
+					
+					
+					iomConn = this.baseTimer.getIomDs().getConnection();
+					iomConn.setAutoCommit(false);
+					iomProc = iomConn.prepareCall("{ call P_INSERT_SMS_NOTICE_INFO(?,?,?,?,?,?,?,?) }");
+					iomProc.setString(1, shardingId);
+					iomProc.setString(2, areaId);
+					iomProc.setString(3, toStaffId);
+					iomProc.setString(4, "");
+					iomProc.setString(5, "7029");
+					iomProc.setString(6, woNbr);
+					iomProc.registerOutParameter(7, oracle.jdbc.OracleTypes.VARCHAR);
+					iomProc.registerOutParameter(8, oracle.jdbc.OracleTypes.VARCHAR);
+					log.debug("调用iom存储，发送短信，调用存储参数依次为："+shardingId+","+areaId+","+toStaffId+","+""+","+"7029"+","+woNbr);
+					iomProc.execute();
+					iomConn.commit();
+					
+					log.info("[thread " + this.threadIndex + "] 处理 task_order "
+							+ toNbr + "解挂成功，解挂之后调用iom接口，发送成功。");
+				}else{
+					log.info("[thread " + this.threadIndex + "] 处理 task_order "
+							+ toNbr + "解挂成功，任务单运行状态为D,不能发送短信通知施工人。");
+				}
+				
 			} catch (Exception e) {
+				log.debug("[thread " + this.threadIndex + "] 处理 task_order "
+						+ toNbr + "发生异常，异常信息："+e.getMessage());
+				e.printStackTrace();
 				
 				try {
 					log.info("[thread " + this.threadIndex + "] 处理 task_order "
@@ -374,7 +470,13 @@ public class RelaseHangTaskThread extends BaseThread {
 				} catch (SQLException e1) {
 					e1.printStackTrace();
 				}
-				e.printStackTrace();
+				if(iomConn!=null){
+					try {
+						iomConn.rollback();
+					} catch (SQLException e1) {
+						e1.printStackTrace();
+					}
+				}
 			} finally {
 				if (client != null) {
 					try {
@@ -396,6 +498,23 @@ public class RelaseHangTaskThread extends BaseThread {
 					log.info("[thread " + this.threadIndex
 							+ "] close db connection");
 				}
+				
+				if(iomProc!=null){
+					try {
+						iomProc.close();
+					} catch (SQLException e) {
+						e.printStackTrace();
+					}
+				}
+				if(iomConn!=null){
+					try {
+						iomConn.close();
+					} catch (SQLException e) {
+						e.printStackTrace();
+					}
+					
+				}
+				
 				// 对于成功，则主线程不会再次扫描到该数据，如果失败则此时lastRecord已经为null，因此也能将失败的数据加入到队列中进行重新执行
 				baseTimer.addCurRecord(threadIndex, null);
 				synchronized (baseTimer.bizDataList[threadIndex]) {

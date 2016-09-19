@@ -23,6 +23,17 @@ public class RelaseHangTaskTimer extends BaseTimer {
 	public void initArguments(String[] args) throws AppException {
 		threadNumber = Integer.parseInt(args[0]);
 		localNetIds = args[1];
+		try {
+			if(args.length>2){
+				preTimeLimit = Integer.parseInt(args[2]);
+			}else{
+				preTimeLimit = 60;
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			preTimeLimit = 60;
+		}
+		
 	}
 
 	@Override
